@@ -63,7 +63,11 @@ ref_step(uint32_t c, uint8_t b)
 static uint32_t
 crc32c_ref(const uint8_t *p, size_t n, uint32_t seed)
 {
-        uint32_t c = seed;
+        /* match the ISA-L crc32_iscsi ABI: the seed argument is the
+         * *return value* of a previous call (i.e. the running crc in
+         * "returned" representation); internal state starts from
+         * ~seed, and the result is returned without final xor. */
+        uint32_t c = ~seed;
         for (size_t i = 0; i < n; i++)
                 c = ref_step(c, p[i]);
         return c;
