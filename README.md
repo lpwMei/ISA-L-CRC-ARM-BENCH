@@ -58,7 +58,24 @@ ISA-L v2.32.1 中 `crc32_iscsi` 在通用 ARMv8（CRC32+PMULL 可用）路径上
   v2.32.1），分别运行 perf，解析 `MB/s` 输出并计算提升百分比；
 - workflow：`.github/workflows/arm-bench.yml`（push / 手动触发）。
 
-## 结果
+## Round 2 变体横评数据（Cobalt 100，run 39586046753）
+
+`tools/variant_bench`（全长度 0..8448 正确性 ALL PASS + 8K warm 速度）：
+
+| 变体 | 8K 带宽 | 相对基线 |
+|---|---|---|
+| crc32_iscsi_crc_ext（1 条 CRC 链） | 24709 MB/s | 1.04x |
+| crc32_iscsi_3crc_fold（v2.32.1 基线） | 23819 MB/s | 1.00x |
+| crc32_iscsi_refl_pmull（纯 NEON） | 18275 MB/s | 0.77x |
+| **crc32c_mix_default（3CRC+PMULL，本仓库方案）** | **31183 MB/s** | **1.31x** |
+| crc32c_mix_neoverse_n1（1CRC+PMULL） | 31284 MB/s | 1.31x |
+
+关键发现：单 CRC 链混合实现与三链打平（31284 vs 31183），说明在 2048B
+块粒度下 CRC 执行端口与 NEON 端口均未饱和；瓶颈更可能在加载端口或
+前端取指带宽。1:3 与 3:1 的 CRC:PMULL 配比性能相同，指向对称的
+资源约束。Round 2c 实验方向：1:1 配比（1024B PMULL + 1024B CRC）。
+
+## Round 1 结果：dispatcher 接线（已合入）
 
 **Cobalt 100（GitHub 免费 ARM runner，`ubuntu-24.04-arm`，CPU part 0xd49），
 `crc32_iscsi_perf` 8KB warm-cache，run
