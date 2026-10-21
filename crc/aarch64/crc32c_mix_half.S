@@ -44,21 +44,23 @@
 	foldc2		.req	v25
 	mask		.req	v26
 
+	/* temps live ONLY in caller-saved SIMD regs (v0-v7, v16-v31):
+	   v8-v15 are callee-saved per AAPCS and must not be touched */
 	l0		.req	v0
 	l1		.req	v1
 	l2		.req	v2
 	l3		.req	v3
-	t0		.req	v8
-	t1		.req	v9
-	t2		.req	v10
-	t3		.req	v11
-	d0v		.req	v12
-	d1v		.req	v13
-	d2v		.req	v14
-	d3v		.req	v15
-	vzr		.req	v19
-	t0s		.req	s8
-	t0d		.req	d8
+	d0v		.req	v4
+	d1v		.req	v5
+	d2v		.req	v6
+	d3v		.req	v7
+	t0		.req	v16
+	t1		.req	v17
+	t2		.req	v18
+	t3		.req	v19
+	vzr		.req	v31
+	t0s		.req	s16
+	t0d		.req	d16
 
 	const_addr	.req	x3
 	pmull_ptr	.req	x4
