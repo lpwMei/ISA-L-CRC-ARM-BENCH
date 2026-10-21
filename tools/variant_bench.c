@@ -63,14 +63,17 @@ ref_step(uint32_t c, uint8_t b)
 static uint32_t
 crc32c_ref(const uint8_t *p, size_t n, uint32_t seed)
 {
-        /* match the ISA-L crc32_iscsi ABI: the seed argument is the
-         * *return value* of a previous call (i.e. the running crc in
-         * "returned" representation); internal state starts from
-         * ~seed, and the result is returned without final xor. */
+        /* match the ASM crc32_iscsi variants ABI (= standard CRC32C):
+         * internal state starts from ~seed and the result carries a
+         * final complement, so that crc32_iscsi(buf, len, 0) returns
+         * the standard CRC32C of buf (verified: "123456789" ->
+         * 0xE3069283).  The C table variant crc32_iscsi_base uses a
+         * pre-inverted-seed convention instead; we do not test it
+         * here. */
         uint32_t c = ~seed;
         for (size_t i = 0; i < n; i++)
                 c = ref_step(c, p[i]);
-        return c;
+        return ~c;
 }
 
 /* ---- timing ---- */
