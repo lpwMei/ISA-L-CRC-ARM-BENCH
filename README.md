@@ -60,4 +60,22 @@ ISA-L v2.32.1 中 `crc32_iscsi` 在通用 ARMv8（CRC32+PMULL 可用）路径上
 
 ## 结果
 
-见 [Actions](../../actions) 运行日志与 artifact `bench-results`。
+**Cobalt 100（GitHub 免费 ARM runner，`ubuntu-24.04-arm`，CPU part 0xd49），
+`crc32_iscsi_perf` 8KB warm-cache，run
+[39579661506](https://github.com/lpwMei/ISA-L-CRC-ARM-BENCH/actions/runs/39579661506)：**
+
+| 实现 | 8K 块带宽 |
+|---|---|
+| baseline v2.32.1（`3crc_fold`） | 26128.96 MB/s |
+| **optimized（`crc32c_mix_default`）** | **35007.64 MB/s** |
+| **提升** | **+33.98%**（目标 +10%） |
+
+正确性：
+
+- 优化树 `make check` 全部通过（含 `PASS: crc/crc32_funcs_test`，
+  随机种子×随机长度 0..4096 / EOB / update 全覆盖 mix 路径）；
+- 两个 perf 二进制对同一 8K 缓冲输出的 CRC 完全一致
+  （`finish 0xd4854010`），逐位相同。
+
+理论模型（3 CRC 链 24B/cycle + NEON PMULL 8B/cycle = 32B/cycle，
++33%）与实测 +33.98% 吻合。
