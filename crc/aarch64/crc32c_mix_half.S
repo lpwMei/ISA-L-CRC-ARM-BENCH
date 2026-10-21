@@ -173,10 +173,10 @@ crc32c_mix_half:
 	mov		w12, l0.s[1]			/* r2 */
 
 	/* ============ CRC chain [1024,2048) ============ */
-	/* BUF is now block_base+512 after the ld1 writeback */
+	/* BUF is now block_base+512 after segment 2 */
 	add		crc_ptr, BUF, #512		/* block_base + 1024 */
 	mov		wCRC, #0
-	.rept	16
+	.rept	64
 	ldp		cd0, cd1, [crc_ptr], #16
 	crc32cx		wCRC, wCRC, cd0
 	crc32cx		wCRC, wCRC, cd1
