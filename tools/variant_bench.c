@@ -63,17 +63,14 @@ ref_step(uint32_t c, uint8_t b)
 static uint32_t
 crc32c_ref(const uint8_t *p, size_t n, uint32_t seed)
 {
-        /* match the ASM crc32_iscsi variants ABI (= standard CRC32C):
-         * internal state starts from ~seed and the result carries a
-         * final complement, so that crc32_iscsi(buf, len, 0) returns
-         * the standard CRC32C of buf (verified: "123456789" ->
-         * 0xE3069283).  The C table variant crc32_iscsi_base uses a
-         * pre-inverted-seed convention instead; we do not test it
-         * here. */
-        uint32_t c = ~seed;
+        /* ISA-L crc32_iscsi ASM variants use the plain running-crc
+         * convention (no mvn for the crc32c poly): internal state
+         * starts from the seed and the state is returned as-is.
+         * Same convention as crc32_iscsi_base in crc_base.c. */
+        uint32_t c = seed;
         for (size_t i = 0; i < n; i++)
                 c = ref_step(c, p[i]);
-        return ~c;
+        return c;
 }
 
 /* ---- timing ---- */
@@ -232,9 +229,10 @@ main(void)
         printf("== correctness (all lengths 0..8448 step 7 + boundaries) ==\n");
         int failures = 0;
         for (size_t n = 0; n <= TEST_LEN + 256; n += 7) {
-                uint32_t r = crc32c_ref(buf, n, (uint32_t) (n * 2654435761u));
+                uint32_t seed = (uint32_t) (n * 2654435761u);
+                uint32_t r = crc32c_ref(buf, n, seed);
                 for (size_t vi = 0; vi < NVARIANTS; vi++) {
-                        uint32_t c = RUN_VARIANT(variants[vi].fn, buf, n);
+                        uint32_t c = call_vfn(variants[vi].fn, buf, n, seed);
                         if (c != r) {
                                 printf("FAIL %-24s len=%zu got=%08x want=%08x\n",
                                        variants[vi].name, n, c, r);
@@ -249,9 +247,10 @@ main(void)
                 size_t n = edges[ei];
                 if (n > TEST_LEN + 256)
                         continue;
-                uint32_t r = crc32c_ref(buf, n, 0x1234);
+                uint32_t seed = 0x1234u + (uint32_t) ei;
+                uint32_t r = crc32c_ref(buf, n, seed);
                 for (size_t vi = 0; vi < NVARIANTS; vi++) {
-                        uint32_t c = RUN_VARIANT(variants[vi].fn, buf, n);
+                        uint32_t c = call_vfn(variants[vi].fn, buf, n, seed);
                         if (c != r) {
                                 printf("FAIL %-24s len=%zu got=%08x want=%08x\n",
                                        variants[vi].name, n, c, r);
