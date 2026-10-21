@@ -122,7 +122,6 @@ set(CRC_AARCH64_SOURCES
     crc/aarch64/crc32_mix_neoverse_n1.S
     crc/aarch64/crc32c_mix_neoverse_n1.S
     crc/aarch64/crc32c_mix_half.S
-    crc/aarch64/crc32c_mix_half.S
 )
 
 # Build source list based on architecture
