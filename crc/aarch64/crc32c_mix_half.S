@@ -40,9 +40,9 @@
 	k3k4		.req	v21
 	polyp		.req	v22
 	k5k0		.req	v23
-	mask		.req	v24
+	mask		.req	v28
 	foldc1		.req	v25
-	foldc2		.req	v27
+	foldc2		.req	v29
 
 	l0		.req	v0
 	l1		.req	v1
@@ -146,7 +146,8 @@ crc32c_mix_half:
 	bls		.Ltail_entry
 
 	ld1		{k1k2.16b, k3k4.16b, polyp.16b}, [const_addr], #48
-	ld1		{k5k0.16b, mask.16b, foldc1.16b, foldc2.16b}, [const_addr]
+	ld1		{k5k0.16b, mask.16b}, [const_addr], #32
+	ld1		{foldc1.16b, foldc2.16b}, [const_addr]
 	movi		vzr.16b, #0
 
 .Lblock:
@@ -162,7 +163,9 @@ crc32c_mix_half:
 	fold512_tail
 	mov		w11, l0.s[1]			/* r1 = barrett result */
 	/* ============ segment 2: [512,1024) from state 0 ============ */
-	ld1		{l0.16b, l1.16b, l2.16b, l3.16b}, [BUF, #512]!
+	add		BUF, BUF, #512
+	ld1		{l0.16b, l1.16b, l2.16b, l3.16b}, [BUF]
+	add		pmull_ptr, BUF, #64
 	.rept	7
 	pf_step
 	.endr
