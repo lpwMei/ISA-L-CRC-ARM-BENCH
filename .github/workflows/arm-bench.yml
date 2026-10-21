@@ -1,0 +1,88 @@
+name: ARM CRC Bench
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  bench:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - name: Show runner CPU info
+        run: |
+          echo "=== /proc/cpuinfo ==="
+          grep -m1 -A1 "model name\|CPU part\|Implementer" /proc/cpuinfo || true
+          echo "=== HWCAP ==="
+          grep -o -m1 "Features.*" /proc/cpuinfo | tr ' ' '\n' | grep -E "^(crc32|pmull|aes)$" || true
+          nproc
+          free -h
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq autoconf automake libtool build-essential gcc
+
+      - name: Checkout (this repo = optimized tree)
+        uses: actions/checkout@v4
+
+      - name: Build & test optimized tree
+        run: |
+          ./autogen.sh
+          ./configure --prefix=$PWD/install-opt
+          make -j4
+          make check 2>&1 | tee check_opt.log || echo "CHECK_FAILED" | tee -a check_opt.log
+          # Show the crc test detail if failed
+          for f in tests/check_crap tests/test-suite.log; do :; done
+          tail -40 check_opt.log
+
+      - name: Run optimized crc32_iscsi_perf (8K)
+        run: |
+          make perf 2>&1 | tail -3
+          ./crc/crc32_iscsi_perf | tee perf_opt.log
+
+      - name: Build & test baseline (vanilla v2.32.1)
+        run: |
+          wget -q https://github.com/intel/isa-l/archive/refs/tags/v2.32.1.tar.gz
+          tar xzf v2.32.1.tar.gz
+          cd isa-l-2.32.1
+          ./autogen.sh
+          ./configure --prefix=$PWD/../install-base
+          make -j4
+          make check 2>&1 | tee ../check_base.log || echo "CHECK_FAILED" | tee -a ../check_base.log
+          ./crc/crc32_iscsi_perf | tee ../perf_base.log
+
+      - name: Compare results
+        run: |
+          echo "=============================================="
+          echo "  crc32_iscsi_perf 8K warm-cache comparison"
+          echo "=============================================="
+          BASE=$(grep -oP 'bandwidth \K[0-9]+ MB in' perf_base.log | grep -oP '^[0-9]+' | head -1)
+          BASE_MBPS=$(grep -oP '= \K[0-9.]+ MB/s' perf_base.log | head -1)
+          OPT_MBPS=$(grep -oP '= \K[0-9.]+ MB/s' perf_opt.log | head -1)
+          echo "baseline v2.32.1 : $BASE_MBPS"
+          echo "optimized (mix)  : $OPT_MBPS"
+          B=${BASE_MBPS% MB/s}
+          O=${OPT_MBPS% MB/s}
+          if command -v python3 >/dev/null; then
+            python3 - "$B" "$O" <<'EOF'
+          import sys
+          try:
+              b = float(sys.argv[1]); o = float(sys.argv[2])
+          except ValueError:
+              print("PARSE ERROR: could not parse MB/s numbers"); sys.exit(2)
+          print(f"speedup = {o/b:.4f}  ({(o/b-1)*100:+.2f}%)")
+          EOF
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: |
+            perf_opt.log
+            perf_base.log
+            check_opt.log
+            check_base.log
