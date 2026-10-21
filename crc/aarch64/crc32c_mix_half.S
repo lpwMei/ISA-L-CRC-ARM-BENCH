@@ -58,6 +58,9 @@
 	t4		.req	v8
 	t5		.req	v9
 	vzr		.req	v26
+	/* scalar views for fmov */
+	t0s		.req	s4
+	t0d		.req	d4
 
 	const_addr	.req	x3
 	pmull_ptr	.req	x4
@@ -118,7 +121,7 @@ crc32c_mix_half:
 	/* ---- seed + first 64B of PMULL region ---- */
 	ld1		{l0.16b, l1.16b, l2.16b, l3.16b}, [BUF]
 	mov		t0.16b, vzr.16b
-	fmov		t0.s, wCRC
+	fmov		t0s, wCRC
 	eor		l0.16b, l0.16b, t0.16b	/* crc into first 4B */
 	add		pmull_ptr, BUF, #64
 	add		crc_ptr, BUF, #1024
@@ -179,7 +182,7 @@ crc32c_mix_half:
 	mov		t0.s[0], l0.s[1]
 	pmull		t0.1q, t0.1d, fold_poly.1d
 	add		BUF, BUF, #2048
-	fmov		xPmull, t0.d
+	fmov		xPmull, t0d
 	crc32cx		w11, wzr, xPmull
 	eor		wCRC, w11, wCRC
 	bhs		.Lblock
