@@ -57,5 +57,6 @@ lsrc_aarch64 += \
 	crc/aarch64/crc32c_mix_default.S \
 	crc/aarch64/crc32_mix_neoverse_n1.S \
 	crc/aarch64/crc32c_mix_neoverse_n1.S \
+	crc/aarch64/crc32c_mix_half.S \
 	crc/aarch64/crc32c_mix_half.S
 
