@@ -42,6 +42,7 @@
 	k5k0		.req	v23
 	foldc1		.req	v24
 	foldc2		.req	v25
+	mask		.req	v26
 
 	l0		.req	v0
 	l1		.req	v1
@@ -55,8 +56,7 @@
 	d1v		.req	v13
 	d2v		.req	v14
 	d3v		.req	v15
-	vzr		.req	v26
-	mask		.req	v27
+	vzr		.req	v19
 	t0s		.req	s8
 	t0d		.req	d8
 
