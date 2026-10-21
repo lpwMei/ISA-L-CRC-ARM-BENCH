@@ -40,25 +40,25 @@
 	k3k4		.req	v21
 	polyp		.req	v22
 	k5k0		.req	v23
-	mask		.req	v28
-	foldc1		.req	v25
-	foldc2		.req	v29
+	foldc1		.req	v24
+	foldc2		.req	v25
 
 	l0		.req	v0
 	l1		.req	v1
 	l2		.req	v2
 	l3		.req	v3
-	t0		.req	v4
-	t1		.req	v5
-	t2		.req	v6
-	t3		.req	v7
-	d0v		.req	v16
-	d1v		.req	v17
-	d2v		.req	v18
-	d3v		.req	v19
+	t0		.req	v8
+	t1		.req	v9
+	t2		.req	v10
+	t3		.req	v11
+	d0v		.req	v12
+	d1v		.req	v13
+	d2v		.req	v14
+	d3v		.req	v15
 	vzr		.req	v26
-	t0s		.req	s4
-	t0d		.req	d4
+	mask		.req	v27
+	t0s		.req	s8
+	t0d		.req	d8
 
 	const_addr	.req	x3
 	pmull_ptr	.req	x4
@@ -146,8 +146,8 @@ crc32c_mix_half:
 	bls		.Ltail_entry
 
 	ld1		{k1k2.16b, k3k4.16b, polyp.16b}, [const_addr], #48
-	ld1		{k5k0.16b, mask.16b}, [const_addr], #32
-	ld1		{foldc1.16b, foldc2.16b}, [const_addr]
+	ld1		{k5k0.16b, foldc1.16b}, [const_addr], #32
+	ld1		{foldc2.16b, mask.16b}, [const_addr]
 	movi		vzr.16b, #0
 
 .Lblock:
@@ -272,10 +272,13 @@ crc32c_mix_half:
 	.octa		0x000000009e4addf800000000740eef02	/* k1k2 */
 	.octa		0x000000014cd00bd600000000f20c0dfe	/* k3k4 */
 	.octa		0x00000000dea713f10000000105ec76f0	/* poly/mu */
-	.octa		0x000000000000000000000000dd45aab8	/* k5 */
-	.octa		0x000000000000000000000000FFFFFFFF	/* mask (128b) */
-	.octa		0x0000000000000000000000009ef68d35	/* K1536 */
-	.octa		0x000000000000000000000000170076fa	/* K1024 */
+	/* offset 48: k5 ; 64: K1536 ; 80: K1024 ; 96: mask (128b) */
+	.quad		0x00000000dd45aab8			/* k5 */
+	.quad		0x000000009ef68d35			/* K1536 */
+	.quad		0x00000000170076fa			/* K1024 */
+	.quad		0
+	.quad		0x00000000FFFFFFFF			/* mask lo */
+	.quad		0					/* mask hi = 0 */
 
 #ifndef __APPLE__
 	.size		crc32c_mix_half, .-crc32c_mix_half
