@@ -46,9 +46,9 @@ jobs:
 
       - name: Variant matrix + micro-arch calibration
         run: |
-          gcc -O2 -o tools/variant_bench tools/variant_bench.c \
-              -I include -I crc .libs/libisal.a 2>&1 || \
-          gcc -O2 -o tools/variant_bench tools/variant_bench.c \
+          gcc -O2 -march=armv8-a+crc+crypto -o tools/variant_bench tools/variant_bench.c \
+              -I include -I crc .libs/libisal.a 2>/dev/null || \
+          gcc -O2 -march=armv8-a+crc+crypto -o tools/variant_bench tools/variant_bench.c \
               -I include -I crc libisal.a
           ./tools/variant_bench | tee variant_bench.log
 

@@ -35,6 +35,14 @@ extern unsigned int crc32_iscsi_refl_pmull(unsigned char *, int, unsigned int);
 extern unsigned int crc32c_mix_default(unsigned char *, uint64_t, unsigned int);
 extern unsigned int crc32c_mix_neoverse_n1(unsigned char *, uint64_t, unsigned int);
 
+typedef unsigned int (*vfn_t)(unsigned char *, uint64_t, unsigned int);
+
+static inline unsigned int
+call_vfn(void *fn, unsigned char *b, uint64_t l, unsigned int c)
+{
+        return ((vfn_t) fn)(b, l, c);
+}
+
 /* ---- table CRC32C reference ---- */
 static uint32_t tab[256];
 static void
@@ -72,19 +80,19 @@ now_sec(void)
 
 typedef struct variant {
         const char *name;
-        unsigned int (*fn)(unsigned char *, uint64_t, unsigned int);
+        void *fn;
 } variant_t;
 
 /* runner that adapts 3-arg (buf,len,crc) to the 2-arg loop shape used
  * by the perf harness: fresh seed each pass, same as upstream perf */
-#define RUN_VARIANT(fn, buf, len) (fn)((buf), (len), 0x1234)
+#define RUN_VARIANT(fn, buf, len) call_vfn(fn, buf, len, 0x1234)
 
 static variant_t variants[] = {
-        { "crc32_iscsi_crc_ext",    crc32_iscsi_crc_ext },
-        { "crc32_iscsi_3crc_fold",  crc32_iscsi_3crc_fold },
-        { "crc32_iscsi_refl_pmull", crc32_iscsi_refl_pmull },
-        { "crc32c_mix_default",     crc32c_mix_default },
-        { "crc32c_mix_neoverse_n1", crc32c_mix_neoverse_n1 },
+        { "crc32_iscsi_crc_ext",    (void *) crc32_iscsi_crc_ext },
+        { "crc32_iscsi_3crc_fold",  (void *) crc32_iscsi_3crc_fold },
+        { "crc32_iscsi_refl_pmull", (void *) crc32_iscsi_refl_pmull },
+        { "crc32c_mix_default",     (void *) crc32c_mix_default },
+        { "crc32c_mix_neoverse_n1", (void *) crc32c_mix_neoverse_n1 },
 };
 
 #define NVARIANTS (sizeof(variants) / sizeof(variants[0]))
@@ -156,36 +164,37 @@ static double __attribute__((noinline))
 calib_pmull(uint8_t *buf, double freq)
 {
         /* emulate fold throughput: repeatedly fold a 512B region using
-         * the same instruction mix (16 pmull + 16 eor + ld1 per 64B) */
+         * the same instruction mix as the mix_default inner loop
+         * (16 pmull + 16 eor + 1x 4-reg ld1 per 64B).  Register list
+         * must be architecturally consecutive for 4-reg ld1. */
         uint64_t it = 0;
         double t0 = now_sec();
         do {
                 __asm__ volatile (
-                        "ldr q2, [%[p], #0]\n\t"
-                        "ld1 {v0.16b, v1.16b, v16.16b, v17.16b}, [%[p]], #64\n\t"
+                        "ld1 {v0.16b, v1.16b, v2.16b, v3.16b}, [%[p]], #64\n\t"
                         ".rept 7\n\t"
-                        "ld1 {v5.16b, v6.16b, v18.16b, v19.16b}, [%[p]], #64\n\t"
-                        "pmull v3.1q, v0.1d, v2.1d\n\t"
-                        "pmull2 v0.1q, v0.2d, v2.2d\n\t"
-                        "pmull v22.1q, v1.1d, v2.1d\n\t"
-                        "pmull2 v1.1q, v1.2d, v2.2d\n\t"
-                        "eor v0.16b, v0.16b, v3.16b\n\t"
-                        "eor v1.16b, v1.16b, v22.16b\n\t"
-                        "eor v0.16b, v0.16b, v5.16b\n\t"
-                        "eor v1.16b, v1.16b, v6.16b\n\t"
-                        "pmull v3.1q, v18.1d, v2.1d\n\t"
-                        "pmull2 v18.1q, v18.2d, v2.2d\n\t"
-                        "pmull v22.1q, v19.1d, v2.1d\n\t"
-                        "pmull2 v19.1q, v19.2d, v2.2d\n\t"
-                        "eor v0.16b, v0.16b, v3.16b\n\t"
-                        "eor v0.16b, v0.16b, v18.16b\n\t"
-                        "eor v1.16b, v1.16b, v22.16b\n\t"
+                        "ld1 {v4.16b, v5.16b, v6.16b, v7.16b}, [%[p]], #64\n\t"
+                        "pmull v16.1q, v0.1d, v2.1d\n\t"
+                        "pmull2 v17.1q, v0.2d, v2.2d\n\t"
+                        "pmull v18.1q, v1.1d, v2.1d\n\t"
+                        "pmull2 v19.1q, v1.2d, v2.2d\n\t"
+                        "eor v0.16b, v16.16b, v17.16b\n\t"
+                        "eor v1.16b, v18.16b, v19.16b\n\t"
+                        "eor v0.16b, v0.16b, v4.16b\n\t"
+                        "eor v1.16b, v1.16b, v5.16b\n\t"
+                        "pmull v16.1q, v6.1d, v2.1d\n\t"
+                        "pmull2 v17.1q, v6.2d, v2.2d\n\t"
+                        "pmull v18.1q, v7.1d, v2.1d\n\t"
+                        "pmull2 v19.1q, v7.2d, v2.2d\n\t"
+                        "eor v0.16b, v0.16b, v16.16b\n\t"
+                        "eor v0.16b, v0.16b, v17.16b\n\t"
+                        "eor v1.16b, v1.16b, v18.16b\n\t"
                         "eor v1.16b, v1.16b, v19.16b\n\t"
                         ".endr\n\t"
                         : [p] "+r" (buf)
                         :
-                        : "v0", "v1", "v2", "v3", "v5", "v6",
-                          "v16", "v17", "v18", "v19", "v22", "memory");
+                        : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7",
+                          "v16", "v17", "v18", "v19", "memory");
                 buf -= 512; /* rewind to fold the same region again */
                 it++;
         } while (now_sec() - t0 < 0.4);
