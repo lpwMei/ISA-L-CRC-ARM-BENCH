@@ -29,17 +29,18 @@ jobs:
 
       - name: Build & test optimized tree
         run: |
-          ./autogen.sh
-          ./configure --prefix=$PWD/install-opt
+          bash autogen.sh
+          bash configure --prefix=$PWD/install-opt
           make -j4
           make check 2>&1 | tee check_opt.log || echo "CHECK_FAILED" | tee -a check_opt.log
-          # Show the crc test detail if failed
-          for f in tests/check_crap tests/test-suite.log; do :; done
-          tail -40 check_opt.log
+          find . -name 'test-suite.log' -newer configure | head -3
+          tail -60 check_opt.log
+          if grep -q CHECK_FAILED check_opt.log; then
+            echo "::error::make check FAILED on optimized tree"; exit 1
+          fi
 
       - name: Run optimized crc32_iscsi_perf (8K)
         run: |
-          make perf 2>&1 | tail -3
           ./crc/crc32_iscsi_perf | tee perf_opt.log
 
       - name: Build & test baseline (vanilla v2.32.1)
@@ -47,8 +48,8 @@ jobs:
           wget -q https://github.com/intel/isa-l/archive/refs/tags/v2.32.1.tar.gz
           tar xzf v2.32.1.tar.gz
           cd isa-l-2.32.1
-          ./autogen.sh
-          ./configure --prefix=$PWD/../install-base
+          bash autogen.sh
+          bash configure --prefix=$PWD/../install-base
           make -j4
           make check 2>&1 | tee ../check_base.log || echo "CHECK_FAILED" | tee -a ../check_base.log
           ./crc/crc32_iscsi_perf | tee ../perf_base.log
