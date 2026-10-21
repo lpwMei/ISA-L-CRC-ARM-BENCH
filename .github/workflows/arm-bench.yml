@@ -41,6 +41,7 @@ jobs:
 
       - name: Run optimized crc32_iscsi_perf (8K)
         run: |
+          make perfs -j4
           ./crc/crc32_iscsi_perf | tee perf_opt.log
 
       - name: Build & test baseline (vanilla v2.32.1)
@@ -51,6 +52,7 @@ jobs:
           bash autogen.sh
           bash configure --prefix=$PWD/../install-base
           make -j4
+          make perfs -j4
           make check 2>&1 | tee ../check_base.log || echo "CHECK_FAILED" | tee -a ../check_base.log
           ./crc/crc32_iscsi_perf | tee ../perf_base.log
 
