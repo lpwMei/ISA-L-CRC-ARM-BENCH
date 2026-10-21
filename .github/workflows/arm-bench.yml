@@ -44,6 +44,14 @@ jobs:
           make perfs -j4
           ./crc/crc32_iscsi_perf | tee perf_opt.log
 
+      - name: Variant matrix + micro-arch calibration
+        run: |
+          gcc -O2 -o tools/variant_bench tools/variant_bench.c \
+              -I include -I crc .libs/libisal.a 2>&1 || \
+          gcc -O2 -o tools/variant_bench tools/variant_bench.c \
+              -I include -I crc libisal.a
+          ./tools/variant_bench | tee variant_bench.log
+
       - name: Build & test baseline (vanilla v2.32.1)
         run: |
           wget -q https://github.com/intel/isa-l/archive/refs/tags/v2.32.1.tar.gz
@@ -89,3 +97,4 @@ jobs:
             perf_base.log
             check_opt.log
             check_base.log
+            variant_bench.log
