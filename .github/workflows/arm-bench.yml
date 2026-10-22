@@ -8,7 +8,7 @@ on:
 jobs:
   bench:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - name: Show runner CPU info
         run: |
@@ -39,18 +39,24 @@ jobs:
             echo "::error::make check FAILED on optimized tree"; exit 1
           fi
 
-      - name: Run optimized crc32_iscsi_perf (8K)
+      - name: Build & run optimized igzip perf
         run: |
           make perfs -j4
-          ./crc/crc32_iscsi_perf | tee perf_opt.log
-
-      - name: Variant matrix + micro-arch calibration
-        run: |
-          gcc -O2 -march=armv8-a+crc+crypto -o tools/variant_bench tools/variant_bench.c \
-              -I include -I crc .libs/libisal.a 2>/dev/null || \
-          gcc -O2 -march=armv8-a+crc+crypto -o tools/variant_bench tools/variant_bench.c \
-              -I include -I crc libisal.a
-          ./tools/variant_bench | tee variant_bench.log
+          # Build test corpus: representative compressible data
+          # 1) 20MB semi-random text-like (worst case: literals)
+          head -c 20000000 /dev/urandom | base64 | head -c 20000000 > /tmp/c.text
+          # 2) 20MB repetitive binary (matches)
+          dd if=/dev/urandom of=/tmp/seed.bin bs=1k count=4 2>/dev/null
+          for i in $(seq 1 5000); do cat /tmp/seed.bin; done | head -c 20000000 > /tmp/c.rep
+          # 3) 20MB mixed
+          (head -c 10000000 /tmp/c.text; cat /tmp/c.rep | head -c 10000000) > /tmp/c.mix
+          ls -la /tmp/c.*
+          for f in text rep mix; do
+            echo "=== igzip_perf lvl1/lvl2 /tmp/c.$f (optimized) ==="
+            ./igzip/igzip_perf -d 3 -i 0 -l 1 -l 2 /tmp/c.$f | tee -a perf_igzip_opt.log
+          done
+          echo "=== crc32_gzip_refl perf (optimized) ==="
+          ./crc/crc32_gzip_refl_perf | tee perf_crc_opt.log || true
 
       - name: Build & test baseline (vanilla v2.32.1)
         run: |
@@ -62,30 +68,70 @@ jobs:
           make -j4
           make perfs -j4
           make check 2>&1 | tee ../check_base.log || echo "CHECK_FAILED" | tee -a ../check_base.log
-          ./crc/crc32_iscsi_perf | tee ../perf_base.log
+          for f in text rep mix; do
+            echo "=== igzip_perf lvl1/lvl2 /tmp/c.$f (baseline) ==="
+            ./igzip/igzip_perf -d 3 -i 0 -l 1 -l 2 /tmp/c.$f | tee -a ../perf_igzip_base.log
+          done
+          echo "=== crc32_gzip_refl perf (baseline) ==="
+          ./crc/crc32_gzip_refl_perf | tee ../perf_crc_base.log || true
+
+      - name: Bit-exactness check (optimized vs baseline outputs)
+        run: |
+          # Re-run with -o to capture outputs and compare bytes
+          cd $GITHUB_WORKSPACE
+          ./igzip/igzip_perf -d 0 -i 0 -l 1 -o /tmp/opt.l1.out /tmp/c.mix > /dev/null
+          ./igzip/igzip_perf -d 0 -i 0 -l 2 -o /tmp/opt.l2.out /tmp/c.mix > /dev/null
+          cd isa-l-2.32.1
+          ./igzip/igzip_perf -d 0 -i 0 -l 1 -o /tmp/base.l1.out /tmp/c.mix > /dev/null
+          ./igzip/igzip_perf -d 0 -i 0 -l 2 -o /tmp/base.l2.out /tmp/c.mix > /dev/null
+          cd $GITHUB_WORKSPACE
+          cmp /tmp/opt.l1.out /tmp/base.l1.out && echo "L1 BIT-EXACT: PASS" | tee bitexact.log
+          cmp /tmp/opt.l2.out /tmp/base.l2.out && echo "L2 BIT-EXACT: PASS" | tee -a bitexact.log
 
       - name: Compare results
         run: |
           echo "=============================================="
-          echo "  crc32_iscsi_perf 8K warm-cache comparison"
+          echo "  igzip_perf lvl1/lvl2 comparison (deflate MB/s)"
           echo "=============================================="
-          BASE=$(grep -oP 'bandwidth \K[0-9]+ MB in' perf_base.log | grep -oP '^[0-9]+' | head -1)
-          BASE_MBPS=$(grep -oP '= \K[0-9.]+ MB/s' perf_base.log | head -1)
-          OPT_MBPS=$(grep -oP '= \K[0-9.]+ MB/s' perf_opt.log | head -1)
-          echo "baseline v2.32.1 : $BASE_MBPS"
-          echo "optimized (mix)  : $OPT_MBPS"
-          B=${BASE_MBPS% MB/s}
-          O=${OPT_MBPS% MB/s}
-          if command -v python3 >/dev/null; then
-            python3 - "$B" "$O" <<'EOF'
-          import sys
-          try:
-              b = float(sys.argv[1]); o = float(sys.argv[2])
-          except ValueError:
-              print("PARSE ERROR: could not parse MB/s numbers"); sys.exit(2)
-          print(f"speedup = {o/b:.4f}  ({(o/b-1)*100:+.2f}%)")
+          python3 - <<'EOF'
+          import re, sys
+
+          def parse(path):
+              """Return {(level, corpus): mbps}."""
+              res = {}
+              level = None
+              corpus = None
+              with open(path) as f:
+                  for line in f:
+                      m = re.match(r"=== igzip_perf lvl1/lvl2 /tmp/c\.(\w+)", line)
+                      if m:
+                          corpus = m.group(1)
+                      m = re.match(r"igzip_perf-> compress level: (\d+)", line)
+                      if m:
+                          level = int(m.group(1))
+                      m = re.search(r"= ([0-9.]+) MB/s", line)
+                      if m and "deflate" in line and level is not None and corpus:
+                          res[(level, corpus)] = float(m.group(1))
+              return res
+
+          base = parse("perf_igzip_base.log")
+          opt = parse("perf_igzip_opt.log")
+          print(f"{'lvl':>4} {'corpus':>6} {'base MB/s':>12} {'opt MB/s':>12} {'speedup':>9}")
+          fails = 0
+          for key in sorted(opt):
+              b = base.get(key)
+              o = opt[key]
+              if b is None:
+                  print(f"{key}: baseline missing")
+                  continue
+              sp = o / b
+              flag = " <-- FAIL" if sp < 1.10 else ""
+              if sp < 1.10:
+                  fails += 1
+              print(f"{key[0]:>4} {key[1]:>6} {b:>12.2f} {o:>12.2f} {sp:>8.2f}x{flag}")
+          print()
+          print("10% TARGET:", "ALL PASS" if fails == 0 else f"{fails} configs below 1.10x")
           EOF
-          fi
 
       - name: Upload results
         if: always()
@@ -93,8 +139,10 @@ jobs:
         with:
           name: bench-results
           path: |
-            perf_opt.log
-            perf_base.log
+            perf_igzip_opt.log
+            perf_igzip_base.log
+            perf_crc_opt.log
+            perf_crc_base.log
+            bitexact.log
             check_opt.log
             check_base.log
-            variant_bench.log
