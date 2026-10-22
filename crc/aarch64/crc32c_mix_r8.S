@@ -38,9 +38,9 @@
 
 /* ---------------- registers ---------------- */
 	const_addr	.req	x3
-	p0		.req	x4
-	p1		.req	x5
-	p2		.req	x6
+	ca		.req	x4
+	cb		.req	x5
+	cc		.req	x6
 	cd0		.req	x7
 	cd1		.req	x8
 	w0c		.req	w15		/* chain0 accumulator */
@@ -65,13 +65,13 @@
 /* one 16B bundle per chain (0,1,2); loads x7/x8 isolated from
  * accumulators w15-w17.  3 ldp + 6 crc32cx per call = 48B. */
 .macro	t_bundles
-	ldp		cd0, cd1, [p0], #16
+	ldp		cd0, cd1, [ca], #16
 	crc32cx		w0c, w0c, cd0
 	crc32cx		w0c, w0c, cd1
-	ldp		cd0, cd1, [p1], #16
+	ldp		cd0, cd1, [cb], #16
 	crc32cx		w1c, w1c, cd0
 	crc32cx		w1c, w1c, cd1
-	ldp		cd0, cd1, [p2], #16
+	ldp		cd0, cd1, [cc], #16
 	crc32cx		w2c, w2c, cd0
 	crc32cx		w2c, w2c, cd1
 .endm
@@ -110,9 +110,9 @@ crc32c_mix_r8:
 	ldr	q2, [x3, #16]			/* K1024 (fc1024) */
 
 .Lblock:
-	add		p0, BUF, #0
-	add		p1, BUF, #512
-	add		p2, BUF, #1024
+	add		ca, BUF, #0
+	add		cb, BUF, #512
+	add		cc, BUF, #1024
 	mov		w0c, wCRC			/* chain0 seeded with running crc */
 	mov		w1c, #0
 	mov		w2c, #0
@@ -128,10 +128,10 @@ crc32c_mix_r8:
 	/* chain0 done. Remaining: ch1 768B (48), ch2 768B (48).
 	 * 12-pair macro: alternate to keep both chains busy. */
 	.rept	24
-	ldp		cd0, cd1, [p1], #16
+	ldp		cd0, cd1, [cb], #16
 	crc32cx		w1c, w1c, cd0
 	crc32cx		w1c, w1c, cd1
-	ldp		cd0, cd1, [p2], #16
+	ldp		cd0, cd1, [cc], #16
 	crc32cx		w2c, w2c, cd0
 	crc32cx		w2c, w2c, cd1
 	.endr
