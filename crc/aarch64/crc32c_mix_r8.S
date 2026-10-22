@@ -118,15 +118,13 @@ crc32c_mix_r8:
 	sub		LEN, LEN, #2048
 
 	/* chain0: 512B = 32 bundles; t_bundles feeds 16B to EACH chain per
-	 * call: 32 calls -> ch0 512B (complete), ch1/ch2 512B each. */
+	 * call: 32 calls -> ch0 [0,512) + ch1 [512,1024) complete,
+	 * ch2 covers [1024,1536). */
 	.rept	32
 	t_bundles
 	.endr
-	/* remaining: ch1 512B (32), ch2 512B (32) = 32 ldp-pairs each. */
+	/* chain2 second half [1536,2048): 32 bundles on cc only. */
 	.rept	32
-	ldp		cd0, cd1, [cb], #16
-	crc32cx		w1c, w1c, cd0
-	crc32cx		w1c, w1c, cd1
 	ldp		cd0, cd1, [cc], #16
 	crc32cx		w2c, w2c, cd0
 	crc32cx		w2c, w2c, cd1
