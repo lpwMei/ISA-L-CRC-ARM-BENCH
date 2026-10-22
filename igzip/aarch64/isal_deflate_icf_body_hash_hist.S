@@ -178,6 +178,86 @@ cdecl(isal_deflate_icf_body_hash_hist_aarch64):
 	cmp	end_in, x0
 	bls	.while_loop_end
 
+/*
+Hybrid 258-byte compare (icf_body only):
+  - scalar first-8B check: exits immediately for short/failed matches
+    (literal-heavy data unchanged, zero extra loads)
+  - if first 8B equal: NEON sweep of [8,256) with independent loads
+    (15x16B via post-increment ld1 + one 8B pair for [248,256)), then a
+    2B check of [256,258).  For match-heavy data (runs at the 258 cap)
+    this replaces the ~258-cycle dependent ldr/eor/rbit/clz chain with
+    ~40 cycles of independent loads.
+  - any difference in [8,258) falls back to the original serial loop
+    resumed at offset 8.
+Clobbers: v0, v1, v16 and (call-site-dead) x2, x6 as NEON pointers.
+*/
+.macro	compare_258_hybrid str0:req,str1:req,match_length:req,tmp0:req,tmp1:req
+	mov	x_\match_length, 0
+	ldr	x_\tmp0, [x_\str0]
+	ldr	x_\tmp1, [x_\str1]
+	eor	x_\tmp0, x_\tmp1, x_\tmp0
+	rbit	x_\tmp0, x_\tmp0
+	clz	x_\tmp0, x_\tmp0
+	lsr	x_\tmp0, x_\tmp0, 3
+	add	x_\match_length, x_\match_length, x_\tmp0
+	cbnz	x_\tmp0, 9f			// diff within first 8B -> done
+
+	// ---- first 8B equal: NEON sweep [8, 248) ----
+	add	x2, x_\str0, 8
+	add	x6, x_\str1, 8
+	movi	v16.16b, #0
+	.rept	15
+	ld1	{v0.16b}, [x2], #16
+	ld1	{v1.16b}, [x6], #16
+	eor	v0.16b, v0.16b, v1.16b
+	orr	v16.16b, v16.16b, v0.16b
+	.endr
+	umov	w_\tmp0, v16.d[0]
+	umov	w_\tmp1, v16.d[1]
+	orr	w_\tmp0, w_\tmp0, w_\tmp1
+	cbnz	w_\tmp0, 3f			// diff in [8,248) -> fallback
+
+	// [248, 256): one 8B pair
+	ldr	x_\tmp0, [x_\str0, 248]
+	ldr	x_\tmp1, [x_\str1, 248]
+	eor	x_\tmp0, x_\tmp1, x_\tmp0
+	cbnz	x_\tmp0, 3f			// diff in [248,256) -> fallback
+
+	// [256, 258): 2B check
+	ldrh	w_\tmp0, [x_\str0, 256]
+	ldrh	w_\tmp1, [x_\str1, 256]
+	eor	w_\tmp0, w_\tmp1, w_\tmp0
+	cbz	w_\tmp0, 4f
+	// diff at byte 256 or 257
+	mov	x_\match_length, 256
+	rbit	w_\tmp0, w_\tmp0
+	clz	w_\tmp0, w_\tmp0
+	lsr	w_\tmp0, w_\tmp0, 3
+	add	x_\match_length, x_\match_length, x_\tmp0
+	b	9f
+4:	// full 258B match
+	mov	x_\match_length, 258
+	b	9f
+3:	// ---- fallback: resume serial loop at offset 8 ----
+	mov	x_\match_length, 8
+_resume_258_\@:
+	ldr	x_\tmp0, [x_\str0, x_\match_length]
+	ldr	x_\tmp1, [x_\str1, x_\match_length]
+	eor	x_\tmp0, x_\tmp1, x_\tmp0
+	rbit	x_\tmp0, x_\tmp0
+	clz	x_\tmp0, x_\tmp0
+	lsr	x_\tmp0, x_\tmp0, 3
+	add	x_\match_length, x_\match_length, x_\tmp0
+	cmp	x_\match_length, 257
+	ccmp	x_\tmp0, 8, 0, ls
+	beq	_resume_258_\@
+	// cap at 258
+	cmp	x_\match_length, 258
+	mov	x_\tmp1, 258
+	csel	x_\match_length, x_\match_length, x_\tmp1, ls
+9:
+.endm
+
 	.align 3
 .while_loop:
 	cmp	next_out, end_out
@@ -222,7 +302,7 @@ cdecl(isal_deflate_icf_body_hash_hist_aarch64):
 	mov	x1, next_in
 	mov	w2, 258
 	sub	x0, next_in, w_dist, uxth
-	compare_258_bytes param0,param1,match_length,tmp0,tmp1
+	compare_258_hybrid param0,param1,match_length,tmp0,tmp1
 
 	and	w1, w_match_length, 65535 // 0xffff
 	cmp	w1, 3

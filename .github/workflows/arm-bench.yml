@@ -112,24 +112,23 @@ jobs:
           echo "  igzip_perf lvl1/lvl2 comparison (deflate MB/s)"
           echo "=============================================="
           python3 - <<'EOF'
-          import re, sys
+          import re
 
           def parse(path):
               """Return {(level, corpus): mbps}."""
               res = {}
               level = None
               corpus = None
-              with open(path) as f:
-                  for line in f:
-                      m = re.match(r"=== igzip_perf lvl1/lvl2 /tmp/c\.(\w+)", line)
-                      if m:
-                          corpus = m.group(1)
-                      m = re.match(r"igzip_perf-> compress level: (\d+)", line)
-                      if m:
-                          level = int(m.group(1))
-                      m = re.search(r"= ([0-9.]+) MB/s", line)
-                      if m and "deflate" in line and level is not None and corpus:
-                          res[(level, corpus)] = float(m.group(1))
+              for line in open(path):
+                  m = re.match(r"igzip_perf-> compress level: (\d+)", line)
+                  if m:
+                      level = int(m.group(1))
+                  m = re.search(r"name: /tmp/c\.(\w+)", line)
+                  if m:
+                      corpus = m.group(1)
+                  m = re.search(r"= ([0-9.]+) MB/s", line)
+                  if m and "deflate" in line and level is not None and corpus:
+                      res[(level, corpus)] = float(m.group(1))
               return res
 
           base = parse("perf_igzip_base.log")
@@ -143,10 +142,10 @@ jobs:
                   print(f"{key}: baseline missing")
                   continue
               sp = o / b
-              flag = " <-- FAIL" if sp < 1.10 else ""
+              flag = " <-- below 10%" if sp < 1.10 else ""
               if sp < 1.10:
                   fails += 1
-              print(f"{key[0]:>4} {key[1]:>6} {b:>12.2f} {o:>12.2f} {sp:>8.2f}x{flag}")
+              print(f"{key[0]:>4} {key[1]:>6} {b:>12.2f} {o:>12.2f} {sp:>8.1%}{flag}")
           print()
           print("10% TARGET:", "ALL PASS" if fails == 0 else f"{fails} configs below 1.10x")
           EOF
