@@ -123,8 +123,8 @@ crc32c_mix_r8:
 	.rept	32
 	t_bundles
 	.endr
-	/* remaining: ch1 512B (32), ch2 512B (32) = 16 ldp-pairs each. */
-	.rept	16
+	/* remaining: ch1 512B (32), ch2 512B (32) = 32 ldp-pairs each. */
+	.rept	32
 	ldp		cd0, cd1, [cb], #16
 	crc32cx		w1c, w1c, cd0
 	crc32cx		w1c, w1c, cd1
