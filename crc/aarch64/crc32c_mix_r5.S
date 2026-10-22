@@ -79,9 +79,14 @@
 	LEN		.req	x1
 	wCRC		.req	w2
 	CRC		.req	x2
-	wA		.req	w9
-	wB		.req	w10
-	wC		.req	w11
+	/* chain accumulators MUST NOT alias the load regs (x9-x14):
+	   use w15 pair? w15/w16 are free GPRs (x15 free, x16... x16 is
+	   free too - t-regs are NEON). Chains: wA=w15, wB=w16? x16 is a
+	   GPR (not aliased to v16). Use x15/x16/x17 GPRs for chains. */
+	wA		.req	w15
+	wB		.req	w16
+	wC		.req	w17
+	wR		.req	w12
 
 	data0		.req	x4
 	data1		.req	x5
@@ -153,9 +158,8 @@
 	eor		l0.16b, l0.16b, t1.16b
 .endm
 
-/* advance true state in wN by 1024 via K1024:
- *   t0 = wN * foldc (pmull) ; wN = crc32cx(0, t0d)
- * gL must be a GPR; uses w-alias of gL internally. */
+/* advance true state in wN by 1024 via K1024.
+ * scratch GPR gL holds the pmull result; w13 (a4) is the crc32cx dst. */
 .macro	adv1024 wN, gL
 	mov		t0.16b, vzr.16b
 	fmov		t0s, \wN
@@ -210,13 +214,13 @@ crc32c_mix_r5:
 	fold_tail
 	abc_bundles
 	abc_bundles
-	mov		w12, l0.s[1]			/* r = barrett result */
+	mov		wR, l0.s[1]			/* r = barrett result */
 
 	/* ==== merge ==== */
 	/* m = adv(adv(adv(r,1024),1024),1024): first hop converts residue */
-	adv1024	w12, x13
-	adv1024	w12, x13
-	adv1024	w12, x13
+	adv1024	wR, x13
+	adv1024	wR, x13
+	adv1024	wR, x13
 	/* mA = adv(cA, 2048) */
 	adv1024	wA, x13
 	adv1024	wA, x13
@@ -224,7 +228,7 @@ crc32c_mix_r5:
 	adv1024	wB, x13
 	eor		wCRC, wC, wB
 	eor		wCRC, wCRC, wA
-	eor		wCRC, wCRC, w12
+	eor		wCRC, wCRC, wR
 
 	add		BUF, BUF, #4096
 	cmp		LEN, #4096
