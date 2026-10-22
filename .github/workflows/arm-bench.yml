@@ -39,6 +39,17 @@ jobs:
             echo "::error::make check FAILED on optimized tree"; exit 1
           fi
 
+      - name: Diagnose failing tests (verbose output)
+        if: always()
+        run: |
+          # Run test binaries directly to capture verbose failure details
+          for t in crc/crc32_funcs_test igzip/igzip_rand_test; do
+            if [ -x "$t" ]; then
+              echo "=== direct run: $t ==="
+              ./$t 2>&1 | head -60 || true
+            fi
+          done
+
       - name: Build & run optimized igzip perf
         run: |
           make perfs -j4
@@ -71,6 +82,7 @@ jobs:
           bash configure --prefix=$PWD/../install-base
           make -j4
           make perfs -j4
+          make igzip/igzip_perf -j4
           make check 2>&1 | tee ../check_base.log || echo "CHECK_FAILED" | tee -a ../check_base.log
           for f in text rep mix; do
             echo "=== igzip_perf lvl1/lvl2 /tmp/c.$f (baseline) ==="
