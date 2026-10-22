@@ -56,6 +56,8 @@ extern uint32_t
 crc32_gzip_refl_3crc_fold(uint32_t, uint8_t *, uint64_t);
 extern uint32_t
 crc32_gzip_refl_pmull(uint32_t, uint8_t *, uint64_t);
+extern uint32_t
+crc32_gzip_refl_mix(uint32_t, uint8_t *, uint64_t);
 
 extern uint64_t
 crc64_ecma_refl_pmull(uint64_t, const unsigned char *, uint64_t);
@@ -163,7 +165,7 @@ DEFINE_INTERFACE_DISPATCHER(crc32_gzip_refl)
                 }
         }
         if ((HWCAP_CRC32 | HWCAP_PMULL) == (auxval & (HWCAP_CRC32 | HWCAP_PMULL))) {
-                return crc32_gzip_refl_3crc_fold;
+                return crc32_gzip_refl_mix;
         }
 
         if (auxval & HWCAP_PMULL)

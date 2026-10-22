@@ -203,19 +203,12 @@ cdecl(isal_deflate_icf_body_hash_hist_aarch64):
 .while_latter_part:
 	and	w_literal, w_literal, 255
 	mov	next_in, next_in_iter
-	add	next_out, next_out, 4
+	orr	w0, w_literal, NULL_DIST_SYM, lsl 10	// lit_len | (NULL_DIST_SYM << 10), extra = 0
 	add	x1, level_buf, w_literal, uxtb 2
+	str	w0, [next_out], 4
 	ldr	w0, [x1, 2296]
 	add	w0, w0, 1
 	str	w0, [x1, 2296]
-	ldrh	w0, [next_out, -4]
-	bfi	w0, w_literal, 0, 10
-	strh	w0, [next_out, -4]
-	ldr	w0, [next_out, -4]
-	bfi	w0, NULL_DIST_SYM, 10, 9
-	str	w0, [next_out, -4]
-	ubfx	x0, x0, 16, 3
-	strh	w0, [next_out, -2]
 
 .while_loop_check:
 	add	x0, next_in, ISAL_LOOK_AHEAD // 288
@@ -264,23 +257,20 @@ cdecl(isal_deflate_icf_body_hash_hist_aarch64):
 	// handle level_buf->hist
 	ldr	w2, [x0, offset_hist_ll_hist]       // 2296, ll_hist
 	add	x4, level_buf, dist_inc, uxtw 2 // d_hist
-	add	next_out, next_out, 4
 	add	w2, w2, 1                           // ll_hist
 	str	w2, [x0, offset_hist_ll_hist]       // 2296, ll_hist
 	ldr	w0, [x4, offset_hist_d_hist]        // 2176, d_hist
 	add	w0, w0, 1                           // d_hist
 	str	w0, [x4, offset_hist_d_hist]        // 2176, d_hist
 
-	// write_deflate_icf
-	ldrh	w0, [next_out, -4]
-	bfi	w0, w3, 0, 10
-	strh	w0, [next_out, -4]
-	ldr	w0, [next_out, -4]
-	bfi	w0, dist_inc, 10, 9
-	str	w0, [next_out, -4]
-	lsr	w0, w0, 16
-	bfi	w0, w1, 3, 13 // w1 => dist_extra
-	strh	w0, [next_out, -2]
+	// write_deflate_icf: lit_len | (lit_dist << 10) | (dist_extra << 19)
+	// match_length = len + LEN_OFFSET (bit10 set, len in bits0-9)
+	// dist_inc = dist_code, w1 = dist_extra
+	orr	w2, w_match_length, dist_inc, lsl 10
+	add	next_out, next_out, 4
+	lsl	w1, w1, 19
+	orr	w2, w2, w1
+	str	w2, [next_out, -4]
 	b	.while_loop_check
 
 	.align 2
