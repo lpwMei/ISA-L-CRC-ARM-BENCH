@@ -200,7 +200,8 @@ Clobbers: v0, v1, v16 and (call-site-dead) x2, x6 as NEON pointers.
 	clz	x_\tmp0, x_\tmp0
 	lsr	x_\tmp0, x_\tmp0, 3
 	add	x_\match_length, x_\match_length, x_\tmp0
-	cbnz	x_\tmp0, 9f			// diff within first 8B -> done
+	cmp	x_\tmp0, 8			// 8 = first 8B all match
+	b.lt	9f				// diff within first 8B -> done
 
 	// ---- first 8B equal: NEON sweep [8, 248) ----
 	add	x2, x_\str0, 8
