@@ -39,6 +39,7 @@ extern unsigned int crc32c_mix_half_ilv(unsigned char *, uint64_t, unsigned int)
 extern unsigned int crc32c_mix_r4(unsigned char *, uint64_t, unsigned int);
 extern unsigned int crc32c_mix_r5(unsigned char *, uint64_t, unsigned int);
 extern unsigned int crc32c_mix_r6(unsigned char *, uint64_t, unsigned int);
+extern unsigned int crc32c_mix_r7(unsigned char *, uint64_t, unsigned int);
 
 typedef unsigned int (*vfn_t)(unsigned char *, uint64_t, unsigned int);
 
@@ -107,6 +108,7 @@ static variant_t variants[] = {
         { "crc32c_mix_r4",           (void *) crc32c_mix_r4 },
         { "crc32c_mix_r5",           (void *) crc32c_mix_r5 },
         { "crc32c_mix_r6",           (void *) crc32c_mix_r6 },
+        { "crc32c_mix_r7",           (void *) crc32c_mix_r7 },
 };
 
 #define NVARIANTS (sizeof(variants) / sizeof(variants[0]))

@@ -61,5 +61,6 @@ lsrc_aarch64 += \
 	crc/aarch64/crc32c_mix_half_ilv.S \
 	crc/aarch64/crc32c_mix_r4.S \
 	crc/aarch64/crc32c_mix_r5.S \
-	crc/aarch64/crc32c_mix_r6.S
+	crc/aarch64/crc32c_mix_r6.S \
+	crc/aarch64/crc32c_mix_r7.S
 
