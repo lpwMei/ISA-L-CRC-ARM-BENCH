@@ -118,16 +118,13 @@ crc32c_mix_r8:
 	mov		w2c, #0
 	sub		LEN, LEN, #2048
 
-	/* chain0: 512B = 16 bundles; chains 1/2: 1024B = 64 bundles each.
-	 * t_bundles gives 16B to each chain per call: 16 calls cover
-	 * chain0 fully (256B of ch1/ch2). Then ch1/ch2 need 48 more
-	 * bundles each (768B): pair-only bundles. */
-	.rept	16
+	/* chain0: 512B = 32 bundles; t_bundles feeds 16B to EACH chain per
+	 * call: 32 calls -> ch0 512B (complete), ch1/ch2 512B each. */
+	.rept	32
 	t_bundles
 	.endr
-	/* chain0 done. Remaining: ch1 768B (48), ch2 768B (48).
-	 * 12-pair macro: alternate to keep both chains busy. */
-	.rept	24
+	/* remaining: ch1 512B (32), ch2 512B (32) = 16 ldp-pairs each. */
+	.rept	16
 	ldp		cd0, cd1, [cb], #16
 	crc32cx		w1c, w1c, cd0
 	crc32cx		w1c, w1c, cd1
