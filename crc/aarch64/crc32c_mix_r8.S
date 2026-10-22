@@ -104,8 +104,7 @@ crc32c_mix_r8:
 	cmp		LEN, 2047
 	b.ls		.Ltail_entry
 
-	adrp	x3, .Lconstants
-	add	x3, x3, :lo12:.Lconstants
+	adr	x3, .Lconstants
 	ldr	q1, [x3, #0]			/* K512  (fc512)  */
 	ldr	q2, [x3, #16]			/* K1024 (fc1024) */
 
