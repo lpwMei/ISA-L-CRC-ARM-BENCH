@@ -154,15 +154,15 @@
 .endm
 
 /* advance true state in wN by 1024 via K1024:
- *   pmull t0 = wN * foldc ; crc32cx wN, wzr, t0d
- * clobbers t0/t0s/t0d + a scratch GPR pair given. */
-.macro	adv1024 wN, gL, gH
+ *   t0 = wN * foldc (pmull) ; wN = crc32cx(0, t0d)
+ * gL must be a GPR; uses w-alias of gL internally. */
+.macro	adv1024 wN, gL
 	mov		t0.16b, vzr.16b
 	fmov		t0s, \wN
 	pmull		t0.1q, t0.1d, foldc.1d
 	fmov		\gL, t0d
-	crc32cx		\gL, wzr, \gL
-	mov		\wN, \gL
+	crc32cx		w13, wzr, \gL
+	mov		\wN, w13
 .endm
 
 	.align		6
@@ -214,14 +214,14 @@ crc32c_mix_r5:
 
 	/* ==== merge ==== */
 	/* m = adv(adv(adv(r,1024),1024),1024): first hop converts residue */
-	adv1024	w12, x13, x14
-	adv1024	w12, x13, x14
-	adv1024	w12, x13, x14
+	adv1024	w12, x13
+	adv1024	w12, x13
+	adv1024	w12, x13
 	/* mA = adv(cA, 2048) */
-	adv1024	wA, x13, x14
-	adv1024	wA, x13, x14
+	adv1024	wA, x13
+	adv1024	wA, x13
 	/* mB = adv(cB, 1024) */
-	adv1024	wB, x13, x14
+	adv1024	wB, x13
 	eor		wCRC, wC, wB
 	eor		wCRC, wCRC, wA
 	eor		wCRC, wCRC, w12
