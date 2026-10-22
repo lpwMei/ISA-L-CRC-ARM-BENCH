@@ -212,10 +212,10 @@ Clobbers: v0, v1, v16 and (call-site-dead) x2, x6 as NEON pointers.
 	eor	v0.16b, v0.16b, v1.16b
 	orr	v16.16b, v16.16b, v0.16b
 	.endr
-	umov	w_\tmp0, v16.d[0]
-	umov	w_\tmp1, v16.d[1]
-	orr	w_\tmp0, w_\tmp0, w_\tmp1
-	cbnz	w_\tmp0, 3f			// diff in [8,248) -> fallback
+	umov	x_\tmp0, v16.d[0]
+	umov	x_\tmp1, v16.d[1]
+	orr	x_\tmp0, x_\tmp0, x_\tmp1
+	cbnz	x_\tmp0, 3f			// diff in [8,248) -> fallback
 
 	// [248, 256): one 8B pair
 	ldr	x_\tmp0, [x_\str0, 248]
