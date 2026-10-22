@@ -281,7 +281,7 @@ crc32_gzip_refl_mix:
 	   crc32_mix_default.S. */
 	.octa		0x00000001c6e415960000000154442bd4		/* k1k2 */
 	.octa		0x00000000ccaa009e00000001751997d0		/* k3k4 */
-	.octa		0x00000001db71064100000001f7011641		/* poly/mu */
+	.octa		0x00000001f701164100000001db710641		/* poly/mu (low=poly, high=mu) */
 	.octa		0x00000000000000000000000163cd6124		/* k5 */
 	.octa		0x000000000000000000000000bbf2f6d6		/* K1024 */
 	.octa		0x00000000FFFFFFFF		/* mask */
