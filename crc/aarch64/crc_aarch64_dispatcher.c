@@ -47,6 +47,8 @@ extern unsigned int
 crc32_iscsi_refl_pmull(unsigned char *, int, unsigned int);
 extern unsigned int
 crc32c_mix_default(unsigned char *, uint64_t, unsigned int);
+extern unsigned int
+crc32c_mix_r4(unsigned char *, uint64_t, unsigned int);
 
 extern uint32_t
 crc32_gzip_refl_crc_ext(uint32_t, uint8_t *, uint64_t);
@@ -132,7 +134,7 @@ DEFINE_INTERFACE_DISPATCHER(crc32_iscsi)
                 }
         }
         if ((HWCAP_CRC32 | HWCAP_PMULL) == (auxval & (HWCAP_CRC32 | HWCAP_PMULL))) {
-                return crc32c_mix_default;
+                return crc32c_mix_r4;
         }
 
         if (auxval & HWCAP_PMULL) {
