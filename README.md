@@ -1,14 +1,107 @@
 # ISA-L-CRC-ARM-BENCH
 
-ISA-L v2.32.1 `crc32_iscsi`（CRC32C）ARM aarch64 性能优化基准仓库。
+ISA-L v2.32.1 ARM aarch64 性能优化基准仓库。
 
 上游 README 见 [README-upstream.md](README-upstream.md)。
 
-## 目标
+**当前成果（Cobalt 100 / Graviton4，GitHub Actions ARM runner，igzip_perf 20MB 语料）：**
 
-在 GitHub Actions 免费 ARM runner（`ubuntu-24.04-arm`，Cobalt 100，4 vCPU）
-上，用 ISA-L 自带的 `crc32_iscsi_perf` 工具对比 **vanilla v2.32.1** 与
-**优化版**的 8K 块性能，目标提升 ≥ 10%。
+| 场景 | 基线 MB/s | 优化 MB/s | 提升 |
+|---|---|---|---|
+| deflate lvl1 文本型 | 109.3 | 193.6 | **+77.2%** |
+| deflate lvl1 混合型 | 206.7 | 376.6 | **+82.2%** |
+| deflate lvl1 重复型 | 1863.8 | 7211.2 | **+286.9%** |
+| deflate lvl2 文本型 | 100.4 | 138.7 | **+38.2%** |
+| deflate lvl2 混合型 | 191.1 | 272.7 | **+42.7%** |
+| deflate lvl2 重复型 | 2056.5 | 11030.3 | **+436.4%** |
+| crc32_gzip_refl（gzip 校验和） | 26147 | 35758 | **+36.8%** |
+| crc32_iscsi（CRC32C，前序工作） | 26129 | 35008 | **+36.9%** |
+
+全部输出与基线 bit-exact，`make check` 17/17 PASS。
+
+---
+
+## gzip (igzip) 优化（本次）
+
+### P0: crc32_gzip_refl_mix —— gzip CRC 校验和 R4 混合实现
+
+gzip 封装（`gzip_flag=IGZIP_GZIP*`）的流校验和使用 `crc32_gzip_refl`
+（CRC32 反射多项式）。上游在通用 ARMv8（CRC32+PMULL）路径上使用的
+`crc32_gzip_refl_3crc_fold` 是纯 3 链 CRC32X 实现，8K warm 仅 ~26 GB/s。
+
+新增 `crc32_gzip_refl_mix`（移植自 CRC32C 工作中硅上验证过的
+`crc32c_mix_r4` 几何）：
+
+- 每 2048B 块：**1024B NEON PMULL 折叠**（含种子）与 **1024B CRC32X 链**
+  以 3-bundle 交织发射——CRC 执行端口与 NEON 端口并行；
+- 折叠/Barrett 常量直接复用树中随附但从未接线的 `crc32_mix_default`
+  （CRC32 多项式版）；合并常量 K1024 为其 `crc32_const[1]`；
+- 位级仿真 `tools/verify_gzip_mix_sim.py` 验证（对照组=crc32_mix_default
+  常量，完整 2048B 块算法×多种子×补码边界 全过）；
+- dispatcher 在 CRC32+PMULL 硬件上选择 mix（原 3crc_fold）。
+
+两轮修复记录（对后来者有教育意义）：
+1. **ABI 参数顺序**：dispatcher 以 `(crc, buf, len)` 调用，r4 体内布局是
+   `(buf, len, crc)`——入口加 4 条 mov 重排 shim；
+2. **.octa 通道顺序**：`poly/mu` 的 Barrett 常量对在 128-bit 常量里写反
+   （`pmull2 .2d` 取高 64 位=mu、`pmull .1d` 取低位=poly）。位级仿真按
+   "名字"取常量，对通道布局不敏感——仿真通过但硬件全错。教训：仿真器
+   必须按**字节布局**建模常量池。
+
+### P1: icf token 直写 —— LZ77 主循环去 RMW
+
+`isal_deflate_icf_body_hash_hist_aarch64`（level 1/2 的 LZ77 主循环）原先
+每个 token 用 **4 load + 4 store 的三段式 RMW** 写中间格式（icf）：
+
+```asm
+ldrh w0,[next_out,-4] ; bfi w0,lit,0,10 ; strh w0,[next_out,-4]   // lit_len
+ldr  w0,[next_out,-4] ; bfi w0,30,10,9 ; str  w0,[next_out,-4]    // lit_dist
+lsr  w0,w0,16         ; bfi w0,xtra,3,13; strh w0,[next_out,-2]   // extra
+```
+
+重写为**直接构造 + 单条 store**：字面量 `orr w0, lit, 30<<10`（extra=0，
+与 C 参考完全一致——上游 ARM 版把 malloc 垃圾留在 extra 死位里，是潜在的
+输出污染路径）；match 路径 `orr/orr/lsl` 位等价构造。
+
+### P2: encode_deflate_icf 位打包状态驻留寄存器
+
+`encode_deflate_icf_aarch64`（icf → deflate 位流）原先每 token **6 store +
+3 load** 在 BitBuf2 结构体与寄存器之间搬运状态。重写为全程驻留寄存器：
+每 token 只剩 1 条 8B store（与 C `flush_bits` 语义逐位一致），
+m_out_end 循环不变量提升出循环。
+
+修复记录：重写版曾把 dist_extra 的移位量多加了 ebc（`add w_count_sum,
+w_d_extra_bit_count, w_count_sum` 放在了 `lsl` 之前），导致 dist>4 的
+match 全部错位。用 Python 双实现对比定位（旧版 200/200 不匹配，
+修复版 500/500 匹配）。
+
+### P3: hybrid 258B 比较 —— NEON 全匹配快速路径
+
+match 密集数据（重复流）在 `compare_258` 里每 token 花约 258 个串行
+ldr/eor/rbit/clz 周期（加载地址依赖上一轮结果 → ~1 cyc/B 天花板，
+实测 ~2 GB/s）。
+
+新增 `compare_258_hybrid`（仅 icf_body，共享宏不动）：
+
+- 标量首 8B 检查：短/失败 match 立即返回（字面量密集型零开销）；
+- 首 8B 相等：15×16B NEON 扫描 [8,248)（后递增 ld1，独立加载）+
+  8B 对 [248,256) + 2B 检查 [256,258)——全长度 match 约 40 周期完成；
+- 任一差异回退原串行循环（从偏移 8 续跑，窗口划分与上游一致，结果
+  位等价；315 组含尾部字节全组合的仿真验证）。
+
+修复记录：初版用 `cbnz x_tmp0` 判断"首 8B 有差异"——但 clz(rbit(0))/8=8
+（全相等时），导致所有长 match 被截断为 8。输出仍是合法 deflate
+（8≥最短匹配），make check 照过、bit-exact 对比才暴露。教训：**有效≠等价**。
+
+### CI 基准方法
+
+`igzip_perf`（上游自带，`-l 1 -l 2`，BENCHMARK 3s 稳态计时）× 3 种 20MB
+语料（base64 文本型 / 4KB 周期重复型 / 混合型），同一 run 内对比
+vanilla v2.32.1；`-o` 输出 cmp 逐字节比对（bit-exact 门禁）。
+
+---
+
+## CRC32C（crc32_iscsi）优化（前序工作，+36.9%）
 
 ## 优化内容：CRC 3-pipeline 适配（3CRC + PMULL 混合）
 
