@@ -22,7 +22,7 @@ jobs:
       - name: Install build deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq autoconf automake libtool build-essential gcc
+          sudo apt-get install -y -qq autoconf automake libtool build-essential gcc zlib1g-dev
 
       - name: Checkout (this repo = optimized tree)
         uses: actions/checkout@v4
@@ -42,6 +42,8 @@ jobs:
       - name: Build & run optimized igzip perf
         run: |
           make perfs -j4
+          make igzip/igzip_perf -j4
+          ls -la igzip/igzip_perf
           # Build test corpus: representative compressible data
           # 1) 20MB semi-random text-like (worst case: literals)
           head -c 20000000 /dev/urandom | base64 | head -c 20000000 > /tmp/c.text
@@ -53,10 +55,12 @@ jobs:
           ls -la /tmp/c.*
           for f in text rep mix; do
             echo "=== igzip_perf lvl1/lvl2 /tmp/c.$f (optimized) ==="
-            ./igzip/igzip_perf -d 3 -i 0 -l 1 -l 2 /tmp/c.$f | tee -a perf_igzip_opt.log
+            ./igzip/igzip_perf -d 3 -i 0 -l 1 -l 2 /tmp/c.$f > /tmp/p.txt 2>&1
+            cat /tmp/p.txt | tee -a perf_igzip_opt.log
           done
           echo "=== crc32_gzip_refl perf (optimized) ==="
-          ./crc/crc32_gzip_refl_perf | tee perf_crc_opt.log || true
+          ./crc/crc32_gzip_refl_perf > /tmp/p.txt 2>&1 || echo "CRC PERF CRASHED rc=$?"
+          cat /tmp/p.txt | tee perf_crc_opt.log
 
       - name: Build & test baseline (vanilla v2.32.1)
         run: |
@@ -70,10 +74,12 @@ jobs:
           make check 2>&1 | tee ../check_base.log || echo "CHECK_FAILED" | tee -a ../check_base.log
           for f in text rep mix; do
             echo "=== igzip_perf lvl1/lvl2 /tmp/c.$f (baseline) ==="
-            ./igzip/igzip_perf -d 3 -i 0 -l 1 -l 2 /tmp/c.$f | tee -a ../perf_igzip_base.log
+            ./igzip/igzip_perf -d 3 -i 0 -l 1 -l 2 /tmp/c.$f > /tmp/p.txt 2>&1
+            cat /tmp/p.txt | tee -a ../perf_igzip_base.log
           done
           echo "=== crc32_gzip_refl perf (baseline) ==="
-          ./crc/crc32_gzip_refl_perf | tee ../perf_crc_base.log || true
+          ./crc/crc32_gzip_refl_perf > /tmp/p.txt 2>&1 || echo "CRC PERF CRASHED rc=$?"
+          cat /tmp/p.txt | tee ../perf_crc_base.log
 
       - name: Bit-exactness check (optimized vs baseline outputs)
         run: |

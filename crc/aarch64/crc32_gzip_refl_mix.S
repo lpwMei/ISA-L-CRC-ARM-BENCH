@@ -138,6 +138,12 @@
 	.type		crc32_gzip_refl_mix, %function
 #endif
 crc32_gzip_refl_mix:
+	/* ABI: uint32_t crc32_gzip_refl_mix(uint32_t crc, const uint8_t *buf, uint64_t len)
+	 *   w0=crc, x1=buf, x2=len  ->  reorder to r4 layout BUF=x0, LEN=x1, wCRC=w2 */
+	mov		w3, w0
+	mov		x0, x1
+	mov		x1, x2
+	mov		w2, w3
 	mvn		wCRC, wCRC
 	cmp		LEN, 2047
 	adr		const_addr, .Lconstants
